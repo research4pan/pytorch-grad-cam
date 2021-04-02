@@ -4,7 +4,10 @@ import cv2
 import numpy as np
 import torch
 from torch.autograd import Function
-from torchvision import models, transforms
+# from torchvision import models
+from torchvision import transforms
+
+from model import resnet18_sepfc_ofc
 
 class FeatureExtractor():
     """ Class for extracting activations and
@@ -21,6 +24,7 @@ class FeatureExtractor():
     def __call__(self, x):
         outputs = []
         self.gradients = []
+        # TODO(@rpan): logging
         # print('===== Feature Exactor')
         # print(self.model._modules.items())
         for name, module in self.model._modules.items():
@@ -53,7 +57,12 @@ class ModelOutputs():
                 x = module(x)
                 x = x.view(x.size(0),-1)
             else:
-                x = module(x)
+                # TODO(@rpan): logging
+                # print(name)
+
+                # To make it compatible with Yong Lin's model
+                if not 'sep' in name:
+                    x = module(x)
 
         return target_activations, x
 
@@ -226,8 +235,9 @@ if __name__ == '__main__':
 
     args = get_args()
 
-    model = models.resnet50(pretrained=True)
+    model = resnet18_sepfc_ofc(pretrained=True)
 
+    # TODO(@rpan): logging
     # from prettytable import PrettyTable
     # def count_parameters(model):
     #     table = PrettyTable(["Modules", "Parameters"])
@@ -244,7 +254,10 @@ if __name__ == '__main__':
     # count_parameters(model)
 
     grad_cam = GradCam(model=model, feature_module=model.layer4, \
-                       target_layer_names=["2"], use_cuda=args.use_cuda)
+                       target_layer_names=["1"], use_cuda=args.use_cuda)
+                # Resnet 18's layer4 only has 2 BasicBlocks,
+                # while resnet50's layer4 has 3 Bottlenecks,
+                # thus "2" -> "1" in target_layer_names
 
     img = cv2.imread(args.image_path, 1)
     img = np.float32(img) / 255
@@ -254,7 +267,7 @@ if __name__ == '__main__':
 
     # If None, returns the map for the highest scoring category.
     # Otherwise, targets the requested category.
-    target_category = None
+    target_category = 0
     grayscale_cam = grad_cam(input_img, target_category)
 
     grayscale_cam = cv2.resize(grayscale_cam, (img.shape[1], img.shape[0]))
