@@ -21,6 +21,8 @@ class FeatureExtractor():
     def __call__(self, x):
         outputs = []
         self.gradients = []
+        # print('===== Feature Exactor')
+        # print(self.model._modules.items())
         for name, module in self.model._modules.items():
             x = module(x)
             if name in self.target_layers:
@@ -225,6 +227,22 @@ if __name__ == '__main__':
     args = get_args()
 
     model = models.resnet50(pretrained=True)
+
+    # from prettytable import PrettyTable
+    # def count_parameters(model):
+    #     table = PrettyTable(["Modules", "Parameters"])
+    #     total_params = 0
+    #     for name, parameter in model.named_parameters():
+    #         if not parameter.requires_grad: continue
+    #         param = parameter.numel()
+    #         table.add_row([name, param])
+    #         total_params+=param
+    #     print(table)
+    #     print(f"Total Trainable Params: {total_params}")
+    #     return total_params
+
+    # count_parameters(model)
+
     grad_cam = GradCam(model=model, feature_module=model.layer4, \
                        target_layer_names=["2"], use_cuda=args.use_cuda)
 
