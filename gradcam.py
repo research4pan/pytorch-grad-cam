@@ -4,10 +4,9 @@ import cv2
 import numpy as np
 import torch
 from torch.autograd import Function
-# from torchvision import models
-from torchvision import transforms
+from torchvision import models, transforms
 
-from model import resnet18_sepfc_ofc
+from resnet_ofc import resnet18_sepfc_ofc
 
 class FeatureExtractor():
     """ Class for extracting activations and
@@ -235,7 +234,10 @@ if __name__ == '__main__':
 
     args = get_args()
 
-    model = resnet18_sepfc_ofc(pretrained=True)
+    # model = resnet18_sepfc_ofc(pretrained=True)
+    model= torch.load('./checkpoints/ERM.pth',
+                      map_location=torch.device('cpu'))
+    # model = models.resnet50(pretrained=True)
 
     # TODO(@rpan): logging
     # from prettytable import PrettyTable
