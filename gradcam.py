@@ -66,12 +66,24 @@ class ModelOutputs():
         return target_activations, x
 
 def preprocess_image(img):
-    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                 std=[0.229, 0.224, 0.225])
+    # Data processing in Yong Lin's code
+    scale = 256.0/224.0
+    target_resolution = (224, 224)
+    assert target_resolution is not None
+    # Resizes the image to a slightly larger square then crops the center.
     preprocessing = transforms.Compose([
         transforms.ToTensor(),
-        normalize,
+        # transforms.Resize((int(target_resolution[0]*scale), int(target_resolution[1]*scale))),
+        # transforms.CenterCrop(target_resolution),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ])
+
+    # normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+    #                              std=[0.229, 0.224, 0.225])
+    # preprocessing = transforms.Compose([
+    #     transforms.ToTensor(),
+    #     normalize,
+    # ])
     return preprocessing(img.copy()).unsqueeze(0)
 
 def show_cam_on_image(img, mask):
@@ -100,12 +112,14 @@ class GradCam:
             input_img = input_img.cuda()
 
         features, output = self.extractor(input_img)
+        print(output)
+        predicted_label = (np.sign(output.detach().numpy()) + 1) // 2
 
         if target_category == None:
             target_category = np.argmax(output.cpu().data.numpy())
 
         one_hot = np.zeros((1, output.size()[-1]), dtype=np.float32)
-        one_hot[0][target_category] = 1
+        one_hot[0][target_category] = np.sign(output.detach().numpy())
         one_hot = torch.from_numpy(one_hot).requires_grad_(True)
         if self.cuda:
             one_hot = one_hot.cuda()
@@ -131,7 +145,7 @@ class GradCam:
         cam = cv2.resize(cam, input_img.shape[2:])
         cam = cam - np.min(cam)
         cam = cam / np.max(cam)
-        return cam
+        return cam, predicted_label
 
 
 class GuidedBackpropReLU(Function):
@@ -187,7 +201,7 @@ class GuidedBackpropReLUModel:
             target_category = np.argmax(output.cpu().data.numpy())
 
         one_hot = np.zeros((1, output.size()[-1]), dtype=np.float32)
-        one_hot[0][target_category] = 1
+        one_hot[0][target_category] = np.sign(output.detach().numpy())
         one_hot = torch.from_numpy(one_hot).requires_grad_(True)
         if self.cuda:
             one_hot = one_hot.cuda()
@@ -206,6 +220,10 @@ def get_args():
                         help='Use NVIDIA GPU acceleration')
     parser.add_argument('--image-path', type=str, default='./examples/both.png',
                         help='Input image path')
+    parser.add_argument('--checkpoint', type=str, default='./checkpoints/IRM.pth',
+                        help='Checkpoint path')
+    parser.add_argument('--output-image-prefix', type=str, default='./cam',
+                        help='Output image path')
     args = parser.parse_args()
     args.use_cuda = args.use_cuda and torch.cuda.is_available()
     if args.use_cuda:
@@ -235,8 +253,7 @@ if __name__ == '__main__':
     args = get_args()
 
     # model = resnet18_sepfc_ofc(pretrained=True)
-    model= torch.load('./checkpoints/ERM.pth',
-                      map_location=torch.device('cpu'))
+    model= torch.load(args.checkpoint, map_location=torch.device('cpu'))
     # model = models.resnet50(pretrained=True)
 
     # TODO(@rpan): logging
@@ -270,7 +287,7 @@ if __name__ == '__main__':
     # If None, returns the map for the highest scoring category.
     # Otherwise, targets the requested category.
     target_category = 0
-    grayscale_cam = grad_cam(input_img, target_category)
+    grayscale_cam, pred = grad_cam(input_img, target_category)
 
     grayscale_cam = cv2.resize(grayscale_cam, (img.shape[1], img.shape[0]))
     cam = show_cam_on_image(img, grayscale_cam)
@@ -283,6 +300,6 @@ if __name__ == '__main__':
     cam_gb = deprocess_image(cam_mask*gb)
     gb = deprocess_image(gb)
 
-    cv2.imwrite("cam.jpg", cam)
+    cv2.imwrite(args.output_image_prefix + '_pred-%d.jpg' % pred, cam)
     cv2.imwrite('gb.jpg', gb)
     cv2.imwrite('cam_gb.jpg', cam_gb)
